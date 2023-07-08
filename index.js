@@ -2,6 +2,7 @@ const express = require("express");
 const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
+const jwt = require("jsonwebtoken");
 require("dotenv").config();
 
 //middleware
@@ -45,8 +46,19 @@ async function run() {
         openingData: new Date(),
         role: "user",
       };
+      // APIs are ends here
       const result = await usersCollection.insertOne(userInfo);
       res.send(result);
+    });
+    // send jwt
+    app.get("/jwt", (req, res) => {
+      const data = { email: req.query.email };
+      console.log(data);
+      const token = jwt.sign(data, process.env.TOKEN_SECRET, {
+        expiresIn: "12h",
+      });
+      console.log(token);
+      res.send({ token });
     });
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
