@@ -50,6 +50,7 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     client.connect();
     const usersCollection = client.db("shop-ex").collection("users");
+    const productsCollection = client.db("shop-ex").collection("products");
     //APIs are started here
 
     // store user data to db
@@ -103,6 +104,7 @@ async function run() {
       });
       res.send({ token });
     });
+    //get role
     app.get("/role", async (req, res) => {
       const email = req.query.email;
       const query = { email };
@@ -130,6 +132,69 @@ async function run() {
       const result = await usersCollection.updateOne(query, updateDoc, options);
       res.send(result);
     });
+    //application for seller
+    app.post("/become-a-seller", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      const query = { email: decodedEmail };
+      const option = { upsert: true };
+      const updateDoc = {
+        $set: {
+          sellerRequest: "pending",
+        },
+      };
+      const result = await usersCollection.updateOne(query, updateDoc, option);
+      res.send(result);
+    });
+    //application status
+    app.get("/seller-application-status", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      const result = await usersCollection.findOne(
+        { email: decodedEmail },
+        { projection: { _id: 0, sellerRequest: 1, deniedReason: 1 } }
+      );
+      if (!result.sellerRequest) {
+        return res.send({ sellerRequest: null });
+      }
+      res.send(result);
+    });
+
+    //seller api starts here
+    app.get("/seller-product-info-count", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      const query = { "seller_info.email": decodedEmail };
+      const totalAdded = await productsCollection
+        .find(query, { projection: { _id: 0, status: 1 } })
+        .toArray();
+      const totalApproved = totalAdded.filter(
+        item => item.status === "approved"
+      ).length;
+      const totalPending = totalAdded.filter(
+        item => item.status === "pending"
+      ).length;
+      const totalRejected = totalAdded.filter(
+        item => item.status === "pending"
+      ).length;
+      res.send({
+        totalAdded: totalAdded.length,
+        totalPending,
+        totalApproved,
+        totalRejected,
+      });
+    });
+    //seller api ends here
+
     // APIs are ends here
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
