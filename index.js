@@ -51,6 +51,23 @@ async function run() {
     client.connect();
     const usersCollection = client.db("shop-ex").collection("users");
     const productsCollection = client.db("shop-ex").collection("products");
+    //user verification
+    const verifySeller = async (req, res, next) => {
+      const email = req.query.email;
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      const query = { email: decodedEmail };
+      const result = await usersCollection.findOne(query, {
+        projection: { _id: 0, role: 1, sellerRequest: 1 },
+      });
+      if (result.role !== "seller" || result.sellerRequest !== "approved") {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      } else {
+        next();
+      }
+    };
     //APIs are started here
 
     // store user data to db
@@ -165,6 +182,53 @@ async function run() {
       }
       res.send(result);
     });
+    // get unique categories
+    app.get("/get-categories", verifyJWT, async (req, res) => {
+      const email = req.query.email;
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      const pipeline = [
+        {
+          $group: {
+            _id: null,
+            categories: { $addToSet: "$product_info.category" },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+          },
+        },
+      ];
+      const result = await productsCollection.aggregate(pipeline).toArray();
+      const category = [];
+      for (const item of result[0].categories) {
+        const newItem = { value: item, label: item };
+        category.push(newItem);
+      }
+      const pipeline2 = [
+        {
+          $group: {
+            _id: null,
+            categories: { $addToSet: "$product_info.sub_category" },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+          },
+        },
+      ];
+      const result2 = await productsCollection.aggregate(pipeline2).toArray();
+      const subCategories = [];
+      for (const item of result2[0].categories) {
+        const newItem = { value: item, label: item };
+        subCategories.push(newItem);
+      }
+      res.send({ category, sub_categories: subCategories });
+    });
 
     //seller api starts here
     app.get("/seller-product-info-count", verifyJWT, async (req, res) => {
@@ -193,6 +257,45 @@ async function run() {
         totalRejected,
       });
     });
+    //add new product
+    app.post("/add-new-product", verifyJWT, verifySeller, async (req, res) => {
+      const email = req.query.email;
+      const body = req.body;
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      console.log(req.body);
+      const productInfo = {
+        product_info: {
+          name: body.product_name,
+          available_status: "in-stock",
+          images: [body.image_links],
+          productDetails: body.product_description,
+          sizes: body.sizes,
+          ratings: body.ratings,
+          created_date: new Date(),
+          last_update: new Date(),
+          available_quantity: body.available_quantity,
+          category: body.category,
+          sub_category: body.sub_category,
+          seller_price: body.product_price,
+          price: parseFloat(
+            (body.product_price * 0.1 + body.product_price).toFixed(2)
+          ),
+        },
+        seller_info: {
+          name: body.seller_name,
+          email: decodedEmail,
+        },
+        total_sold: 0,
+        comments: [],
+        status: "pending",
+      };
+      const result = await productsCollection.insertOne(productInfo);
+      res.send(result);
+    });
+
     //seller api ends here
 
     // APIs are ends here

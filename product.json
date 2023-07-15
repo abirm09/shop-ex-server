@@ -1,22 +1,20 @@
 {
   "product_info": {
-    "name": "Men's Sneaker",
+    "name": "ULTRABOOST 22 SHOES",
     "available_status": "in-stock",
     "images": [
-      {
-        "imgUrl": "https://assets.adidas.com/images/h_840,f_auto,q_auto,fl_lossy,c_fill,g_auto/fbaf991a78bc4896a3e9ad7800abcec6_9366/Ultraboost_22_Shoes_Black_GZ0127_01_standard.jpg"
-      }
+      "https://assets.adidas.com/images/h_840,f_auto,q_auto,fl_lossy,c_fill,g_auto/fbaf991a78bc4896a3e9ad7800abcec6_9366/Ultraboost_22_Shoes_Black_GZ0127_01_standard.jpg"
     ],
     "productDetails": "Lorem ipsum dolor sit amet, consectetur adipiscing elit.",
-    "sizes": ["xxs", "xs", "sm", "md", "lg", "xl", "xxl", "xxxl"],
-    "ratings": 4.5,
+    "sizes": ["xs", "sm", "md", "lg", "xl", "xxl"],
+    "ratings": 4.2,
     "created_date": "2023-06-01",
     "last_update": "2023-06-14",
     "available_quantity": 10,
-    "category": "Men",
-    "sub_category": "T-shirt",
-    "seller_price": 100,
-    "price": 110
+    "category": "Fashion",
+    "sub_category": "Bag",
+    "seller_price": 50,
+    "price": 55
   },
   "seller_info": {
     "name": "Example Seller",
