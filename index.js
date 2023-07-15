@@ -230,7 +230,7 @@ async function run() {
       res.send({ category, sub_categories: subCategories });
     });
 
-    //seller api starts here
+    //======================seller api starts here=====================
     app.get("/seller-product-info-count", verifyJWT, async (req, res) => {
       const email = req.query.email;
       const decodedEmail = req.decoded.email;
@@ -248,7 +248,7 @@ async function run() {
         item => item.status === "pending"
       ).length;
       const totalRejected = totalAdded.filter(
-        item => item.status === "pending"
+        item => item.status === "rejected"
       ).length;
       res.send({
         totalAdded: totalAdded.length,
@@ -259,13 +259,12 @@ async function run() {
     });
     //add new product
     app.post("/add-new-product", verifyJWT, verifySeller, async (req, res) => {
-      const email = req.query.email;
       const body = req.body;
+      const email = req.query.email;
       const decodedEmail = req.decoded.email;
       if (email !== decodedEmail) {
         return res.status(403).send({ error: true, message: "Access denied" });
       }
-      console.log(req.body);
       const productInfo = {
         product_info: {
           name: body.product_name,
@@ -295,8 +294,29 @@ async function run() {
       const result = await productsCollection.insertOne(productInfo);
       res.send(result);
     });
-
-    //seller api ends here
+    //added products
+    app.get("/my-added-products", async (req, res) => {
+      const email = req.query.email;
+      // const decodedEmail = req.decoded.email;
+      // if (email !== decodedEmail) {
+      //   return res.status(403).send({ error: true, message: "Access denied" });
+      // }
+      const query = { "seller_info.email": email };
+      const option = {
+        projection: {
+          _id: 1,
+          "product_info.name": 1,
+          "product_info.images": 1,
+          "product_info.productDetails": 1,
+          "product_info.sizes": 1,
+          "product_info.available_quantity": 1,
+          "product_info.seller_price": 1,
+        },
+      };
+      const result = await productsCollection.find(query, option).toArray();
+      res.send(result);
+    });
+    //========================seller api ends here=====================
 
     // APIs are ends here
     // Send a ping to confirm a successful connection
