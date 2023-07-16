@@ -68,6 +68,28 @@ async function run() {
         next();
       }
     };
+    const veryProductOwner = async (req, res, next) => {
+      const reqId = req.query.id;
+      const decodedEmail = req.decoded.email;
+      const query = { _id: new ObjectId(reqId) };
+      const productOwnerEmail = await productsCollection.findOne(query, {
+        projection: { _id: 0, "seller_info.email": 1 },
+      });
+      if (productOwnerEmail.seller_info.email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      } else {
+        next();
+      }
+    };
+    const verifyUser = (req, res, next) => {
+      const email = req.query.email;
+      const decodedEmail = req.decoded.email;
+      if (email !== decodedEmail) {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      } else {
+        next();
+      }
+    };
     //APIs are started here
 
     // store user data to db
@@ -90,12 +112,9 @@ async function run() {
       res.send(result);
     });
     //delete user
-    app.delete("/delete-user", verifyJWT, async (req, res) => {
+    app.delete("/delete-user", verifyJWT, verifyUser, async (req, res) => {
       const email = req.query.email;
       const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: "Access denied" });
-      }
       const options = {
         projection: { _id: 0, role: 1 },
       };
@@ -132,30 +151,33 @@ async function run() {
       res.send(result);
     });
     //Update user Photo
-    app.post("/update-user-profile-pic", verifyJWT, async (req, res) => {
-      const email = req.query.email;
-      const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: "Access denied" });
+    app.post(
+      "/update-user-profile-pic",
+      verifyJWT,
+      verifyUser,
+      async (req, res) => {
+        const email = req.query.email;
+        const decodedEmail = req.decoded.email;
+        const query = { email: decodedEmail };
+        const options = { upsert: true };
+        const updateDoc = {
+          $set: {
+            profilePic: req.body.profilePic,
+            profileDelete: req.body.profileDelete,
+          },
+        };
+        const result = await usersCollection.updateOne(
+          query,
+          updateDoc,
+          options
+        );
+        res.send(result);
       }
-      const query = { email: decodedEmail };
-      const options = { upsert: true };
-      const updateDoc = {
-        $set: {
-          profilePic: req.body.profilePic,
-          profileDelete: req.body.profileDelete,
-        },
-      };
-      const result = await usersCollection.updateOne(query, updateDoc, options);
-      res.send(result);
-    });
+    );
     //application for seller
-    app.post("/become-a-seller", verifyJWT, async (req, res) => {
+    app.post("/become-a-seller", verifyJWT, verifyUser, async (req, res) => {
       const email = req.query.email;
       const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: "Access denied" });
-      }
       const query = { email: decodedEmail };
       const option = { upsert: true };
       const updateDoc = {
@@ -167,28 +189,27 @@ async function run() {
       res.send(result);
     });
     //application status
-    app.get("/seller-application-status", verifyJWT, async (req, res) => {
-      const email = req.query.email;
-      const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: "Access denied" });
+    app.get(
+      "/seller-application-status",
+      verifyJWT,
+      verifyUser,
+      async (req, res) => {
+        const email = req.query.email;
+        const decodedEmail = req.decoded.email;
+        const result = await usersCollection.findOne(
+          { email: decodedEmail },
+          { projection: { _id: 0, sellerRequest: 1, deniedReason: 1 } }
+        );
+        if (!result.sellerRequest) {
+          return res.send({ sellerRequest: null });
+        }
+        res.send(result);
       }
-      const result = await usersCollection.findOne(
-        { email: decodedEmail },
-        { projection: { _id: 0, sellerRequest: 1, deniedReason: 1 } }
-      );
-      if (!result.sellerRequest) {
-        return res.send({ sellerRequest: null });
-      }
-      res.send(result);
-    });
+    );
     // get unique categories
-    app.get("/get-categories", verifyJWT, async (req, res) => {
+    app.get("/get-categories", verifyJWT, verifyUser, async (req, res) => {
       const email = req.query.email;
       const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: "Access denied" });
-      }
       const pipeline = [
         {
           $group: {
@@ -231,91 +252,146 @@ async function run() {
     });
 
     //======================seller api starts here=====================
-    app.get("/seller-product-info-count", verifyJWT, async (req, res) => {
-      const email = req.query.email;
-      const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: "Access denied" });
+    app.get(
+      "/seller-product-info-count",
+      verifyJWT,
+      verifyUser,
+      async (req, res) => {
+        const email = req.query.email;
+        const decodedEmail = req.decoded.email;
+        const query = { "seller_info.email": decodedEmail };
+        const totalAdded = await productsCollection
+          .find(query, { projection: { _id: 0, status: 1 } })
+          .toArray();
+        const totalApproved = totalAdded.filter(
+          item => item.status === "approved"
+        ).length;
+        const totalPending = totalAdded.filter(
+          item => item.status === "pending"
+        ).length;
+        const totalRejected = totalAdded.filter(
+          item => item.status === "rejected"
+        ).length;
+        res.send({
+          totalAdded: totalAdded.length,
+          totalPending,
+          totalApproved,
+          totalRejected,
+        });
       }
-      const query = { "seller_info.email": decodedEmail };
-      const totalAdded = await productsCollection
-        .find(query, { projection: { _id: 0, status: 1 } })
-        .toArray();
-      const totalApproved = totalAdded.filter(
-        item => item.status === "approved"
-      ).length;
-      const totalPending = totalAdded.filter(
-        item => item.status === "pending"
-      ).length;
-      const totalRejected = totalAdded.filter(
-        item => item.status === "rejected"
-      ).length;
-      res.send({
-        totalAdded: totalAdded.length,
-        totalPending,
-        totalApproved,
-        totalRejected,
-      });
-    });
+    );
     //add new product
-    app.post("/add-new-product", verifyJWT, verifySeller, async (req, res) => {
-      const body = req.body;
-      const email = req.query.email;
-      const decodedEmail = req.decoded.email;
-      if (email !== decodedEmail) {
-        return res.status(403).send({ error: true, message: "Access denied" });
+    app.post(
+      "/add-new-product",
+      verifyJWT,
+      verifyUser,
+      verifySeller,
+      async (req, res) => {
+        const body = req.body;
+        const productInfo = {
+          product_info: {
+            name: body.product_name,
+            available_status: "in-stock",
+            images: [body.image_links],
+            productDetails: body.product_description,
+            sizes: body.sizes,
+            ratings: body.ratings,
+            created_date: new Date(),
+            last_update: new Date(),
+            available_quantity: body.available_quantity,
+            category: body.category,
+            sub_category: body.sub_category,
+            seller_price: body.product_price,
+            price: parseFloat(
+              (body.product_price * 0.1 + body.product_price).toFixed(2)
+            ),
+          },
+          seller_info: {
+            name: body.seller_name,
+            email: decodedEmail,
+          },
+          total_sold: 0,
+          comments: [],
+          status: "pending",
+        };
+        const result = await productsCollection.insertOne(productInfo);
+        res.send(result);
       }
-      const productInfo = {
-        product_info: {
-          name: body.product_name,
-          available_status: "in-stock",
-          images: [body.image_links],
-          productDetails: body.product_description,
-          sizes: body.sizes,
-          ratings: body.ratings,
-          created_date: new Date(),
-          last_update: new Date(),
-          available_quantity: body.available_quantity,
-          category: body.category,
-          sub_category: body.sub_category,
-          seller_price: body.product_price,
-          price: parseFloat(
-            (body.product_price * 0.1 + body.product_price).toFixed(2)
-          ),
-        },
-        seller_info: {
-          name: body.seller_name,
-          email: decodedEmail,
-        },
-        total_sold: 0,
-        comments: [],
-        status: "pending",
-      };
-      const result = await productsCollection.insertOne(productInfo);
-      res.send(result);
-    });
+    );
     //added products
-    app.get("/my-added-products", async (req, res) => {
-      const email = req.query.email;
-      // const decodedEmail = req.decoded.email;
-      // if (email !== decodedEmail) {
-      //   return res.status(403).send({ error: true, message: "Access denied" });
-      // }
-      const query = { "seller_info.email": email };
-      const option = {
-        projection: {
-          _id: 1,
-          "product_info.name": 1,
-          "product_info.images": 1,
-          "product_info.productDetails": 1,
-          "product_info.sizes": 1,
-          "product_info.available_quantity": 1,
-          "product_info.seller_price": 1,
-        },
-      };
-      const result = await productsCollection.find(query, option).toArray();
-      res.send(result);
-    });
+    app.get(
+      "/my-added-products",
+      verifyJWT,
+      verifyUser,
+      verifySeller,
+      async (req, res) => {
+        const decodedEmail = req.decoded.email;
+        const query = { "seller_info.email": decodedEmail };
+        const option = {
+          projection: {
+            _id: 1,
+            "product_info.name": 1,
+            "product_info.images": 1,
+            "product_info.productDetails": 1,
+            "product_info.sizes": 1,
+            "product_info.available_quantity": 1,
+            "product_info.seller_price": 1,
+          },
+        };
+        const result = await productsCollection.find(query, option).toArray();
+        res.send(result);
+      }
+    );
+    app.delete(
+      "/delete-product",
+      verifyJWT,
+      verifyUser,
+      verifySeller,
+      veryProductOwner,
+      async (req, res) => {
+        const reqId = req.query.id;
+        const query = { _id: new ObjectId(reqId) };
+        const result = await productsCollection.deleteOne(query);
+        res.send(result);
+      }
+    );
+    app.get(
+      "/single-product-info",
+      verifyJWT,
+      verifySeller,
+      veryProductOwner,
+      verifyUser,
+      async (req, res) => {
+        const reqId = req.query.id;
+        const query = { _id: new ObjectId(reqId) };
+        const option = {
+          projection: {
+            _id: 1,
+            "product_info.name": 1,
+            "product_info.images": 1,
+            "product_info.productDetails": 1,
+            "product_info.sizes": 1,
+            "product_info.available_quantity": 1,
+            "product_info.seller_price": 1,
+          },
+        };
+        const result = await productsCollection.findOne(query, option);
+        res.send(result);
+      }
+    );
+    //update product
+    app.put(
+      "/update-product",
+      verifyJWT,
+      verifySeller,
+      veryProductOwner,
+      verifyUser,
+      async (req, res) => {
+        const body = req.body;
+        console.log(body);
+        res.send(["ok"]);
+      }
+    );
     //========================seller api ends here=====================
 
     // APIs are ends here
