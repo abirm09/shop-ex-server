@@ -4,6 +4,7 @@ const axios = require("axios");
 const app = express();
 const port = process.env.PORT || 5000;
 const jwt = require("jsonwebtoken");
+const Joi = require("joi");
 require("dotenv").config();
 
 //middleware
@@ -53,7 +54,7 @@ async function run() {
     const productsCollection = client.db("shop-ex").collection("products");
     //user verification
     const verifySeller = async (req, res, next) => {
-      const email = req.query.email;
+      const email = req?.query?.email;
       const decodedEmail = req.decoded.email;
       if (email !== decodedEmail) {
         return res.status(403).send({ error: true, message: "Access denied" });
@@ -68,8 +69,9 @@ async function run() {
         next();
       }
     };
+    //product verification
     const veryProductOwner = async (req, res, next) => {
-      const reqId = req.query.id;
+      const reqId = req?.query?.id;
       const decodedEmail = req.decoded.email;
       const query = { _id: new ObjectId(reqId) };
       const productOwnerEmail = await productsCollection.findOne(query, {
@@ -81,14 +83,38 @@ async function run() {
         next();
       }
     };
+    //user verification
     const verifyUser = (req, res, next) => {
-      const email = req.query.email;
+      const email = req?.query?.email;
       const decodedEmail = req.decoded.email;
       if (email !== decodedEmail) {
         return res.status(403).send({ error: true, message: "Access denied" });
       } else {
         next();
       }
+    };
+    //staff verification
+    const verifyStaff = async (req, res, next) => {
+      const email = req?.query?.email;
+      const result = await usersCollection.findOne(
+        { email },
+        { projection: { _id: 0, role: 1 } }
+      );
+      if (result?.role !== "staff") {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      next();
+    };
+
+    //validate id
+    const validateId = (req, res, next) => {
+      const id = req.query.id;
+      if (!ObjectId.isValid(id)) {
+        return res
+          .status(400)
+          .send({ error: true, message: "Wrong product id" });
+      }
+      next();
     };
     //APIs are started here
 
@@ -251,6 +277,28 @@ async function run() {
       res.send({ category, sub_categories: subCategories });
     });
 
+    //======================Public api starts here=====================
+    //get single products info
+    app.get("/single-product", validateId, async (req, res) => {
+      const id = req.query.id;
+      const query = { _id: new ObjectId(id) };
+      const option = {
+        projection: {
+          "product_info.name": 1,
+          "product_info.images": 1,
+          "product_info.productDetails": 1,
+          "product_info.sizes": 1,
+          "product_info.ratings": 1,
+          "product_info.available_quantity": 1,
+          "product_info.price": 1,
+          "seller_info.name": 1,
+          "seller_info.email": 1,
+        },
+      };
+      const result = await productsCollection.findOne(query, option);
+      res.send({ result });
+    });
+    //======================Public api ends here=====================
     //======================seller api starts here=====================
     app.get(
       "/seller-product-info-count",
@@ -393,6 +441,77 @@ async function run() {
       }
     );
     //========================seller api ends here=====================
+    //========================staff api starts here=====================
+    app.get(
+      "/staff-info-count",
+      verifyJWT,
+      verifyUser,
+      verifyStaff,
+      async (req, res) => {
+        const option = { projection: { _id: 0, status: 1 } };
+        const result = await productsCollection.find({}, option).toArray();
+        const pending_products = result.filter(
+          item => item.status === "pending"
+        ).length;
+        const approved_products = result.filter(
+          item => item.status === "approved"
+        ).length;
+        const rejected_products = result.filter(
+          item => item.status === "rejected"
+        ).length;
+        res.send({
+          totalProducts: result.length,
+          pending_products: pending_products,
+          approved_products,
+          rejected_products,
+        });
+      }
+    );
+    //TODO:Set verification
+    app.get(
+      "/pending-products",
+      verifyJWT,
+      verifyUser,
+      verifyStaff,
+      async (req, res) => {
+        const query = { status: "pending" };
+        const option = {
+          projection: {
+            "product_info.name": 1,
+            "product_info.images": 1,
+          },
+        };
+        const result = await productsCollection.find(query, option).toArray();
+        res.send(result);
+      }
+    );
+    app.put(
+      "/initial-check-product",
+      verifyJWT,
+      verifyUser,
+      verifyStaff,
+      validateId,
+      async (req, res) => {
+        const id = req.query.id;
+        const email = req.query.email;
+        const staffName = req.query.name;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            status: "checked",
+            checkedBy: {
+              staffName,
+              staffEmail: email,
+            },
+          },
+        };
+        const result = await productsCollection.updateOne(query, updateDoc, {
+          upsert: true,
+        });
+        res.send(result);
+      }
+    );
+    //========================staff api ends here=====================
 
     // APIs are ends here
     // Send a ping to confirm a successful connection

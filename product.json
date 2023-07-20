@@ -34,7 +34,7 @@
   "status": "approved",
   "checkedBy": {
     "staffName": "Staff1",
-    "staffId": "staff123"
+    "staffEmail": "staff123"
   },
   "approved_by": {
     "adminName": "Admin1",
