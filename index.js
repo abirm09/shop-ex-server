@@ -70,7 +70,7 @@ async function run() {
       }
     };
     //product verification
-    const veryProductOwner = async (req, res, next) => {
+    const verifyProductOwner = async (req, res, next) => {
       const reqId = req?.query?.id;
       const decodedEmail = req.decoded.email;
       const query = { _id: new ObjectId(reqId) };
@@ -305,7 +305,6 @@ async function run() {
       verifyJWT,
       verifyUser,
       async (req, res) => {
-        const email = req.query.email;
         const decodedEmail = req.decoded.email;
         const query = { "seller_info.email": decodedEmail };
         const totalAdded = await productsCollection
@@ -395,7 +394,7 @@ async function run() {
       verifyJWT,
       verifyUser,
       verifySeller,
-      veryProductOwner,
+      verifyProductOwner,
       async (req, res) => {
         const reqId = req.query.id;
         const query = { _id: new ObjectId(reqId) };
@@ -407,7 +406,7 @@ async function run() {
       "/single-product-info",
       verifyJWT,
       verifySeller,
-      veryProductOwner,
+      verifyProductOwner,
       verifyUser,
       async (req, res) => {
         const reqId = req.query.id;
@@ -432,12 +431,61 @@ async function run() {
       "/update-product",
       verifyJWT,
       verifySeller,
-      veryProductOwner,
+      verifyProductOwner,
       verifyUser,
       async (req, res) => {
         const body = req.body;
         console.log(body);
         res.send(["ok"]);
+      }
+    );
+    app.get(
+      "/sellers-rejected-products",
+      verifyJWT,
+      verifyUser,
+      verifySeller,
+      async (req, res) => {
+        const decodedEmail = req.decoded.email;
+        const query = { "seller_info.email": decodedEmail, status: "rejected" };
+        const option = {
+          projection: {
+            "product_info.name": 1,
+            "product_info.images": 1,
+            rejected_by: 1,
+            rejected_reason: 1,
+          },
+        };
+        const result = await productsCollection.find(query, option).toArray();
+        res.send(result);
+      }
+    );
+    app.post(
+      "/correction-done",
+      verifyJWT,
+      verifyUser,
+      validateId,
+      verifySeller,
+      verifyProductOwner,
+      async (req, res) => {
+        const id = req.query.id;
+        console.log(id);
+        const query = { _id: new ObjectId(id) };
+        const option = { upsert: true };
+        const updateDoc = {
+          $set: {
+            status: "pending  ",
+          },
+          $unset: {
+            rejected_by: 1,
+            rejected_reason: 1,
+          },
+        };
+        const result = await productsCollection.updateOne(
+          query,
+          updateDoc,
+          option
+        );
+        res.send(result);
       }
     );
     //========================seller api ends here=====================
@@ -467,7 +515,7 @@ async function run() {
         });
       }
     );
-    //TODO:Set verification
+    //get al pending products
     app.get(
       "/pending-products",
       verifyJWT,
@@ -479,12 +527,14 @@ async function run() {
           projection: {
             "product_info.name": 1,
             "product_info.images": 1,
+            "seller_info.email": 1,
           },
         };
         const result = await productsCollection.find(query, option).toArray();
         res.send(result);
       }
     );
+    //initial check product
     app.put(
       "/initial-check-product",
       verifyJWT,
@@ -508,6 +558,36 @@ async function run() {
         const result = await productsCollection.updateOne(query, updateDoc, {
           upsert: true,
         });
+        res.send(result);
+      }
+    );
+    //initial reject product
+    app.put(
+      "/reject-initial",
+      verifyJWT,
+      verifyUser,
+      verifyStaff,
+      validateId,
+      async (req, res) => {
+        const id = req.query.id;
+        const { reason } = req.body;
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            status: "rejected",
+            rejected_reason: reason,
+            rejected_by: {
+              staffName: req.query.name,
+              staffEmail: req.query.email,
+            },
+          },
+        };
+        const option = { upsert: true };
+        const result = await productsCollection.updateOne(
+          query,
+          updateDoc,
+          option
+        );
         res.send(result);
       }
     );
