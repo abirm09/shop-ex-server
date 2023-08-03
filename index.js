@@ -106,6 +106,18 @@ async function run() {
       next();
     };
 
+    //admin verification
+    const verifyAdmin = async (req, res, next) => {
+      const email = req?.query?.email;
+      const result = await usersCollection.findOne(
+        { email },
+        { projection: { _id: 0, role: 1 } }
+      );
+      if (result?.role !== "admin") {
+        return res.status(403).send({ error: true, message: "Access denied" });
+      }
+      next();
+    };
     //validate id
     const validateId = (req, res, next) => {
       const id = req.query.id;
@@ -473,7 +485,7 @@ async function run() {
         const option = { upsert: true };
         const updateDoc = {
           $set: {
-            status: "pending  ",
+            status: "pending",
           },
           $unset: {
             rejected_by: 1,
@@ -592,6 +604,38 @@ async function run() {
       }
     );
     //========================staff api ends here=====================
+    //========================admin api starts here=====================
+
+    //get admin info count
+    app.get(
+      "/admin-info-count",
+      verifyJWT,
+      verifyUser,
+      verifyAdmin,
+      async (req, res) => {
+        const result = await productsCollection
+          .find({}, { projection: { _id: 0, status: 1 } })
+          .toArray();
+        const pendingApproval = result.filter(
+          item => item.status === "checked"
+        ).length;
+        const approveProducts = result.filter(
+          item => item.status === "approve"
+        ).length;
+        const rejectedProducts = result.filter(
+          item => item.status === "adminRejected"
+        ).length;
+        const infoCount = {
+          totalProducts: result.length,
+          pendingApproval,
+          approveProducts,
+          rejectedProducts,
+        };
+        res.send(infoCount);
+      }
+    );
+
+    //========================admin api ends here=====================
 
     // APIs are ends here
     // Send a ping to confirm a successful connection
