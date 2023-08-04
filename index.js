@@ -20,8 +20,8 @@ app.listen(port, () => {
 });
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const uri = `mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1`;
-
+// const uri = `mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1`;
+const uri = `mongodb+srv://${process.env.DB_ID}:${process.env.DB_PASS}@cluster0.v6yry4e.mongodb.net/?retryWrites=true&w=majority`;
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
@@ -543,6 +543,7 @@ async function run() {
           },
         };
         const result = await productsCollection.find(query, option).toArray();
+        console.log(result);
         res.send(result);
       }
     );
@@ -565,6 +566,10 @@ async function run() {
               staffName,
               staffEmail: email,
             },
+          },
+          $unset: {
+            rejected_by: 1,
+            rejected_reason: 1,
           },
         };
         const result = await productsCollection.updateOne(query, updateDoc, {
@@ -620,7 +625,7 @@ async function run() {
           item => item.status === "checked"
         ).length;
         const approveProducts = result.filter(
-          item => item.status === "approve"
+          item => item.status === "approved"
         ).length;
         const rejectedProducts = result.filter(
           item => item.status === "adminRejected"
@@ -635,6 +640,42 @@ async function run() {
       }
     );
 
+    //initial checked products
+    app.get(
+      "/checked-products",
+      verifyJWT,
+      verifyUser,
+      verifyAdmin,
+      async (req, res) => {
+        const query = { status: "checked" };
+        const result = await productsCollection.find(query).toArray();
+        res.send(result);
+      }
+    );
+    //admin approve
+    app.post("/approve-by-admin", async (req, res) => {
+      const adminEmail = req.query.email;
+      const adminName = req.query.displayName;
+      const id = req.query.id;
+      const query = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          status: "approved",
+          approved_by: {
+            adminName,
+            adminEmail,
+          },
+        },
+        $unset: {
+          rejected_admin: 1,
+          admin_rejected_reason: 1,
+        },
+      };
+      const result = await productsCollection.updateOne(query, updateDoc, {
+        upsert: true,
+      });
+      res.send(result);
+    });
     //========================admin api ends here=====================
 
     // APIs are ends here

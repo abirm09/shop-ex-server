@@ -2,3 +2,4 @@ node_modules
 .env
 dynamicaly-add-product.js
 product.json
+.vercel
