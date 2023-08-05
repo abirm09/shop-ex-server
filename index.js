@@ -22,7 +22,6 @@ app.listen(port, () => {
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 // const uri = `mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1`;
 const uri = `mongodb+srv://${process.env.DB_ID}:${process.env.DB_PASS}@cluster0.v6yry4e.mongodb.net/?retryWrites=true&w=majority`;
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -329,7 +328,7 @@ async function run() {
           item => item.status === "pending"
         ).length;
         const totalRejected = totalAdded.filter(
-          item => item.status === "rejected"
+          item => item.status === "rejected" || item.status === "adminRejected"
         ).length;
         res.send({
           totalAdded: totalAdded.length,
@@ -395,6 +394,7 @@ async function run() {
             "product_info.sizes": 1,
             "product_info.available_quantity": 1,
             "product_info.seller_price": 1,
+            status: 1,
           },
         };
         const result = await productsCollection.find(query, option).toArray();
@@ -458,13 +458,19 @@ async function run() {
       verifySeller,
       async (req, res) => {
         const decodedEmail = req.decoded.email;
-        const query = { "seller_info.email": decodedEmail, status: "rejected" };
+        const query = {
+          "seller_info.email": decodedEmail,
+          $or: [{ status: "rejected" }, { status: "adminRejected" }],
+        };
         const option = {
           projection: {
             "product_info.name": 1,
             "product_info.images": 1,
             rejected_by: 1,
             rejected_reason: 1,
+            admin_rejected_reason: 1,
+            rejected_admin: 1,
+            status: 1,
           },
         };
         const result = await productsCollection.find(query, option).toArray();
@@ -480,17 +486,22 @@ async function run() {
       verifyProductOwner,
       async (req, res) => {
         const id = req.query.id;
-        console.log(id);
         const query = { _id: new ObjectId(id) };
         const option = { upsert: true };
+        const ifStaffReject = {
+          rejected_by: 1,
+          rejected_reason: 1,
+        };
+        const ifAdminReject = {
+          admin_rejected_reason: 1,
+          rejected_admin: 1,
+        };
         const updateDoc = {
           $set: {
-            status: "pending",
+            status: req.query.status === "rejected" ? "pending" : "checked",
           },
-          $unset: {
-            rejected_by: 1,
-            rejected_reason: 1,
-          },
+          $unset:
+            req.query.status === "rejected" ? ifStaffReject : ifAdminReject,
         };
         const result = await productsCollection.updateOne(
           query,
@@ -543,7 +554,6 @@ async function run() {
           },
         };
         const result = await productsCollection.find(query, option).toArray();
-        console.log(result);
         res.send(result);
       }
     );
@@ -667,8 +677,8 @@ async function run() {
           },
         },
         $unset: {
-          rejected_admin: 1,
           admin_rejected_reason: 1,
+          rejected_admin: 1,
         },
       };
       const result = await productsCollection.updateOne(query, updateDoc, {
@@ -676,6 +686,34 @@ async function run() {
       });
       res.send(result);
     });
+    app.post(
+      "/rejected-by-admin",
+      verifyJWT,
+      verifyUser,
+      validateId,
+      verifyAdmin,
+      async (req, res) => {
+        const id = req.query.id;
+        const { reason } = req.body;
+        const rejectedAdmin = {
+          adminName: req.query.name,
+          adminEmail: req.query.email,
+        };
+        const query = { _id: new ObjectId(id) };
+        const updateDoc = {
+          $set: {
+            status: "adminRejected",
+            admin_rejected_reason: reason,
+            rejected_admin: rejectedAdmin,
+          },
+        };
+        const result = await productsCollection.updateOne(query, updateDoc, {
+          upsert: true,
+        });
+
+        res.send(result);
+      }
+    );
     //========================admin api ends here=====================
 
     // APIs are ends here
