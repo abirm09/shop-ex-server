@@ -20,8 +20,8 @@ app.listen(port, () => {
 });
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-// const uri = `mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1`;
-const uri = `mongodb+srv://${process.env.DB_ID}:${process.env.DB_PASS}@cluster0.v6yry4e.mongodb.net/?retryWrites=true&w=majority`;
+const uri = `mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1`;
+// const uri = `mongodb+srv://${process.env.DB_ID}:${process.env.DB_PASS}@cluster0.v6yry4e.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -308,6 +308,28 @@ async function run() {
       };
       const result = await productsCollection.findOne(query, option);
       res.send({ result });
+    });
+    //get all active products
+    app.get("/products", async (req, res) => {
+      const query = { status: "approved" };
+      const option = {
+        projection: {
+          "product_info.name": 1,
+          "product_info.images": 1,
+          "product_info.images": 1,
+          "product_info.sizes": 1,
+          "product_info.ratings": 1,
+          "product_info.created_date": 1,
+          "product_info.available_quantity": 1,
+          "product_info.category": 1,
+          "product_info.sub_category": 1,
+          "product_info.price": 1,
+          seller_info: 1,
+          comments: 1,
+        },
+      };
+      const result = await productsCollection.find(query, option).toArray();
+      res.send(result);
     });
     //======================Public api ends here=====================
     //======================seller api starts here=====================
@@ -711,6 +733,90 @@ async function run() {
           upsert: true,
         });
 
+        res.send(result);
+      }
+    );
+    //get all requested seller
+    app.get(
+      "/requested-seller",
+      verifyJWT,
+      verifyUser,
+      verifyAdmin,
+      async (req, res) => {
+        const query = { sellerRequest: "pending" };
+        const option = {
+          projection: {
+            name: 1,
+            profilePic: 1,
+            email: 1,
+            openingData: 1,
+          },
+        };
+        const result = await usersCollection.find(query, option).toArray();
+        res.send(result);
+      }
+    );
+    //approve seller request
+    app.post(
+      "/approve-seller-request",
+      verifyJWT,
+      verifyUser,
+      verifyAdmin,
+      async (req, res) => {
+        const reqEmail = req.query.reqEmail;
+        const query = { email: reqEmail };
+        const adminEmail = req.query.email;
+        const updateDoc = {
+          $set: {
+            sellerRequest: "approved",
+            role: "seller",
+            approvedBY: adminEmail,
+          },
+        };
+        const result = await usersCollection.updateOne(query, updateDoc, {
+          upsert: true,
+        });
+        res.send(result);
+      }
+    );
+    //get user info for adding new staff
+    app.get(
+      "/get-new-staff-info",
+      verifyJWT,
+      verifyUser,
+      verifyAdmin,
+      async (req, res) => {
+        const { staffEmail } = req.query;
+        const query = { email: staffEmail, role: "customer" };
+        const result = await usersCollection.findOne(query);
+        if (!result) {
+          return res.send({
+            status: false,
+            message: "Could not find any customer to this email.",
+          });
+        }
+        result.status = true;
+        res.send(result);
+      }
+    );
+    //approve new staff
+    app.post(
+      "/make-new-staff",
+      verifyJWT,
+      verifyUser,
+      verifyAdmin,
+      async (req, res) => {
+        const { email, staffEmail } = req.query;
+        const query = { email: staffEmail };
+        const updateDoc = {
+          $set: {
+            role: "staff",
+            approved_by: email,
+          },
+        };
+        const result = await usersCollection.updateOne(query, updateDoc, {
+          upsert: true,
+        });
         res.send(result);
       }
     );
