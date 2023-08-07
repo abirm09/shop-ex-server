@@ -331,6 +331,34 @@ async function run() {
       const result = await productsCollection.find(query, option).toArray();
       res.send(result);
     });
+
+    //get random products
+    app.get("/random-products/:limit", async (req, res) => {
+      const limit = req.params.limit || 20;
+      const pipeline = [
+        { $match: { status: "approved" } },
+        { $sample: { size: Number(limit) } },
+        {
+          $project: {
+            "product_info.name": 1,
+            "product_info.images": 1,
+            "product_info.images": 1,
+            "product_info.sizes": 1,
+            "product_info.ratings": 1,
+            "product_info.created_date": 1,
+            "product_info.available_quantity": 1,
+            "product_info.category": 1,
+            "product_info.sub_category": 1,
+            "product_info.price": 1,
+            seller_info: 1,
+            comments: 1,
+          },
+        },
+      ];
+      const result = await productsCollection.aggregate(pipeline).toArray();
+      res.send(result);
+    });
+
     //======================Public api ends here=====================
     //======================seller api starts here=====================
     app.get(
