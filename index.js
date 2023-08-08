@@ -20,8 +20,8 @@ app.listen(port, () => {
 });
 
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const uri = `mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1`;
-// const uri = `mongodb+srv://${process.env.DB_ID}:${process.env.DB_PASS}@cluster0.v6yry4e.mongodb.net/?retryWrites=true&w=majority`;
+// const uri = `mongodb://127.0.0.1:27017/?directConnection=true&serverSelectionTimeoutMS=2000&appName=mongosh+1.9.1`;
+const uri = `mongodb+srv://${process.env.DB_ID}:${process.env.DB_PASS}@cluster0.v6yry4e.mongodb.net/?retryWrites=true&w=majority`;
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -304,10 +304,11 @@ async function run() {
           "product_info.price": 1,
           "seller_info.name": 1,
           "seller_info.email": 1,
+          "product_info.ratings": 1,
         },
       };
       const result = await productsCollection.findOne(query, option);
-      res.send({ result });
+      res.send(result);
     });
     //get all active products
     app.get("/products", async (req, res) => {
